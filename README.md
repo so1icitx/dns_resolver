@@ -1,50 +1,52 @@
+<div align="center">
+<h1>dns_resolver</h1>
 
-# Simple DNS Recursive Server
+A recursive DNS resolver written in Python using raw UDP sockets. Resolves 
+domains by walking the full delegation chain ,  Root servers → TLD nameservers 
+→ Authoritative nameservers.
 
-A recursive DNS resolver written entirely from scratch in Python. Instead of using high-level DNS libraries, this project uses raw UDP sockets to manually parse packets and resolve domains by talking directly to the internet's Root, TLD, and Authoritative nameservers.
+[![License](https://img.shields.io/github/license/so1icitx/dns_resolver)](LICENSE)
+</div>
 
-## Current State & Limitations
+## How it works
 
-This project was written as a conceptual proof-of-concept to understand how DNS works at the raw byte level. I am aware it is not perfect and is missing some important features like:
+Every query triggers a full recursive resolution from scratch:
 
-* **Complex Glue Records:** Standard lookups work perfectly, but it currently struggles to troubleshoot and resolve missing nameserver IPs if they belong to completely separate domains.
-* **No TCP Support:** The server only supports standard 512-byte UDP payloads. If a response is too large and gets truncated, it does not yet know how to fall back to a TCP connection.
-* **No Caching:** Every request performs a full lookup from the Root servers instead of remembering past answers(but this was intended as i wanted to see how the recursion worked).
+1. A random root server is selected from the 13 IANA root server IPs
+2. The TLD nameserver (e.g. `.com`) is extracted from the root response
+3. The authoritative nameserver for the domain is resolved from the TLD response
+4. The final query is sent to the authoritative nameserver and the answer is relayed back to the client
 
-## Getting Started
+DNS packets are parsed manually using `struct.unpack` directly on the raw 
+byte stream. The question section, authority records, and additional records 
+are all walked by hand to extract nameserver IPs and glue records.
 
-### Prerequisites
+## Getting started
 
-* Python 3.x
-
-
-### Installation & Execution
-
-1. Clone the repository and open the folder:
-
-```bash
-git clone https://github.com/yourusername/simple-dns-resolver.git
-cd simple-dns-resolver
-
-```
-
-2. Start the DNS server:
+Requires Python 3.x. No external dependencies.
 
 ```bash
-python3 main.py
-
+git clone https://github.com/so1icitx/dns-resolver.git
+cd dns-resolver
 ```
 
-> The server will begin listening for incoming traffic on local port 53, and might require admin or root privileges
+The server binds to port `53` and may require root privileges:
 
+```bash
+sudo python3 main.py
+```
 
-### Testing the Server
-
-Once the server is running, open a separate terminal window. You can use `nslookup` to force your computer to ask your Python script for the IP address instead of your normal internet provider.
+Test with `nslookup`:
 
 ```bash
 nslookup google.com 127.0.0.1
-
 ```
 
-You should see your Python script output the routing process, and the `nslookup` window will print the final IP address.
+## Known limitations
+
+- Glue record handling is fragile ,  if a nameserver's IP isn't in the 
+  additional section of the response, resolution fails
+- UDP only; no TCP fallback for responses over 512 bytes
+- No caching ,  every query walks the full chain from root servers
+- No support for reverse lookups (`arpa` queries are silently dropped)
+- Single-threaded; one query at a time
